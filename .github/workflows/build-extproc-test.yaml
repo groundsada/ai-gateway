@@ -45,10 +45,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build extproc binary
+        run: |
+          make build.extproc GOOS_LIST="linux" GOARCH_LIST="amd64 arm64"
+
       - name: Build and Push extproc Image
         run: |
           TAG="body-mutation-${{ github.sha }}"
-          make docker-build.extproc CMD_PATH_PREFIX=cmd ENABLE_MULTI_PLATFORMS=true TAG=$TAG DOCKER_BUILD_ARGS="--push" REGISTRY=ghcr.io/${{ github.repository_owner }}/
+          docker buildx build . -t ghcr.io/${{ github.repository_owner }}/ai-gateway-extproc:$TAG \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg VARIANT=static \
+            --build-arg COMMAND_NAME=extproc \
+            --push
 
       - name: Show image tag
         run: |
