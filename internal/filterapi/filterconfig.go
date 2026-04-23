@@ -274,6 +274,21 @@ type HTTPBodyField struct {
 	// string, number, boolean, object, array, or null.
 	// The value will be parsed as JSON and inserted at the specified field.
 	Value string `json:"value"`
+	// Merge, when true, merges the new value into an existing object at the path
+	// instead of replacing it entirely. This preserves existing fields.
+	Merge *bool `json:"merge,omitempty"`
+	// ValueFrom extracts the value from request context instead of using a static value.
+	ValueFrom *ValueFrom `json:"valueFrom,omitempty"`
+}
+
+// ValueFrom defines the source of a dynamic value for body mutation
+type ValueFrom struct {
+	// HeaderName is the name of the header to extract the value from.
+	HeaderName string `json:"headerName"`
+	// Hash is the hash algorithm to apply to the value (sha256 or empty).
+	Hash string `json:"hash,omitempty"`
+	// Encoding is the output encoding (base64 or empty for raw bytes).
+	Encoding string `json:"encoding,omitempty"`
 }
 
 // UnmarshalConfigYaml reads the file at the given path and unmarshals it into a Config struct.
