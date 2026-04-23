@@ -1,4 +1,4 @@
-name: Build Extproc Test Image
+name: Build Test Images
 
 on:
   push:
@@ -12,9 +12,61 @@ permissions:
   id-token: write
 
 jobs:
+  build-controller:
+    name: Build Controller Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          ref: body-mutation-clean
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v5
+        with:
+          cache: false
+          go-version-file: go.mod
+
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/go/bin
+          key: build-container-${{ hashFiles('**/go.mod', '**/go.sum', '**/Makefile') }}
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Login into GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build controller binary
+        run: |
+          make build.controller GOOS_LIST="linux" GOARCH_LIST="amd64 arm64"
+
+      - name: Build and Push controller Image
+        run: |
+          TAG="body-mutation-${{ github.sha }}"
+          docker buildx build . -t ghcr.io/${{ github.repository_owner }}/ai-gateway-controller:$TAG \
+            --platform linux/amd64,linux/arm64 \
+            --build-arg VARIANT=static \
+            --build-arg COMMAND_NAME=controller \
+            --push
+
+      - name: Show controller image tag
+        run: |
+          echo "::set-output name=controller_image::ghcr.io/${{ github.repository_owner }}/ai-gateway-controller:body-mutation-${{ github.sha }}"
+          echo "Controller image: ghcr.io/${{ github.repository_owner }}/ai-gateway-controller:body-mutation-${{ github.sha }}"
+
   build-extproc:
     name: Build Extproc Image
     runs-on: ubuntu-latest
+    needs: build-controller
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
         with:
@@ -60,4 +112,4 @@ jobs:
 
       - name: Show image tag
         run: |
-          echo "Built image: ghcr.io/${{ github.repository_owner }}/ai-gateway-extproc:body-mutation-${{ github.sha }}"
+          echo "Extproc image: ghcr.io/${{ github.repository_owner }}/ai-gateway-extproc:body-mutation-${{ github.sha }}"
