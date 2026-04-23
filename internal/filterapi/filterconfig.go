@@ -248,12 +248,31 @@ type HTTPBodyMutation struct {
 // HTTPBodyField represents a JSON field name and value for body mutation
 type HTTPBodyField struct {
 	// Path is the top-level field name to set in the request body.
-	// Examples: "service_tier", "max_tokens", "temperature"
+	// Examples: "service_tier", "max_tokens", "temperature", "extra_body.cache_salt"
 	Path string `json:"path"`
 	// Value is the JSON value to set at the specified field. This can be any valid JSON value:
 	// string, number, boolean, object, array, or null.
 	// The value will be parsed as JSON and inserted at the specified field.
-	Value string `json:"value"`
+	// Cannot be used together with ValueFrom.
+	Value string `json:"value,omitempty"`
+	// ValueFrom specifies a dynamic value to set at the specified field, derived from request context.
+	// Cannot be used together with Value.
+	ValueFrom *ValueFrom `json:"valueFrom,omitempty"`
+	// Merge specifies whether to merge with an existing value at the path instead of replacing it.
+	// When true and the path points to an existing object/map, the value will be merged into the existing object.
+	Merge *bool `json:"merge,omitempty"`
+}
+
+// ValueFrom defines how to derive a dynamic value for a body field mutation.
+type ValueFrom struct {
+	// HeaderName specifies the name of the HTTP header to extract the value from.
+	HeaderName string `json:"headerName"`
+	// Hash specifies the hash algorithm to apply to the header value.
+	// Valid values: "sha256" or empty (no hashing).
+	Hash string `json:"hash,omitempty"`
+	// Encoding specifies the encoding for the hash output.
+	// Valid values: "base64" or empty (raw bytes as JSON array).
+	Encoding string `json:"encoding,omitempty"`
 }
 
 // UnmarshalConfigYaml reads the file at the given path and unmarshals it into a Config struct.
