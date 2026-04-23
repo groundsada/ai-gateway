@@ -1,0 +1,55 @@
+name: Build Extproc Test Image
+
+on:
+  push:
+    branches:
+      - "body-mutation-build"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-extproc:
+    name: Build Extproc Image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
+        with:
+          ref: body-mutation-build
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v5
+        with:
+          cache: false
+          go-version-file: go.mod
+
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/go/bin
+          key: build-container-${{ hashFiles('**/go.mod', '**/go.sum', '**/Makefile') }}
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Login into GitHub Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push extproc Image
+        run: |
+          TAG="body-mutation-${{ github.sha }}"
+          make docker-build.extproc CMD_PATH_PREFIX=cmd ENABLE_MULTI_PLATFORMS=true TAG=$TAG DOCKER_BUILD_ARGS="--push" REGISTRY=ghcr.io/${{ github.repository_owner }}/
+
+      - name: Show image tag
+        run: |
+          echo "Built image: ghcr.io/${{ github.repository_owner }}/ai-gateway-extproc:body-mutation-${{ github.sha }}"
