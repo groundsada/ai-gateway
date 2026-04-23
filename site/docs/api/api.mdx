@@ -614,6 +614,7 @@ QuotaPolicyList contains a list of QuotaPolicy
 - [QuotaValue](#quotavalue)
 - [ServiceQuotaDefinition](#servicequotadefinition)
 - [ToolCall](#toolcall)
+- [ValueFrom](#valuefrom)
 - [VersionedAPISchema](#versionedapischema)
 
 ### Type Definitions
@@ -1616,12 +1617,23 @@ HTTPBodyField represents a JSON field name and value for body mutation
   name="path"
   type="string"
   required="true"
-  description="Path is the top-level field name to set in the request body.<br />Examples: `service_tier`, `max_tokens`, `temperature`"
+  description="Path is the top-level field name to set in the request body.<br />Examples: `service_tier`, `max_tokens`, `temperature`, `extra_body.cache_salt`"
 /><ApiField
   name="value"
   type="string"
-  required="true"
-  description="Value is the JSON value to set at the specified field. This can be any valid JSON value:<br />string, number, boolean, object, array, or null.<br />The value will be parsed as JSON and inserted at the specified field.<br />Examples:<br />  - `\`scale\`` (string)<br />  - `42` (number)<br />  - `true` (boolean)<br />  - `\{\`key\`: \`value\`\}` (object)<br />  - `[1, 2, 3]` (array)<br />  - `null` (null)"
+  required="false"
+  description="Value is the JSON value to set at the specified field. This can be any valid JSON value:<br />string, number, boolean, object, array, or null.<br />The value will be parsed as JSON and inserted at the specified field.<br />Examples:<br />  - `\`scale\`` (string)<br />  - `42` (number)<br />  - `true` (boolean)<br />  - `\{\`key\`: \`value\`\}` (object)<br />  - `[1, 2, 3]` (array)<br />  - `null` (null)<br />Cannot be used together with ValueFrom."
+/><ApiField
+  name="valueFrom"
+  type="[ValueFrom](#valuefrom)"
+  required="false"
+  description="ValueFrom specifies a dynamic value to set at the specified field, derived from request context.<br />This is useful for generating user-specific values like cache_salt.<br />Cannot be used together with Value.<br />Example for cache_salt isolation:<br />  valueFrom:<br />    headerName: x-user-id<br />    hash: sha256<br />    encoding: base64"
+/><ApiField
+  name="merge"
+  type="boolean"
+  required="false"
+  defaultValue="false"
+  description="Merge specifies whether to merge with an existing value at the path instead of replacing it.<br />When true and the path points to an existing object/map, the value will be merged into the existing object.<br />This is useful for adding fields like cache_salt to existing extra_body without losing other fields.<br />Example:<br />  Input:  \{`extra_body`: \{`temperature`: 0.7\}\}<br />  Config: path=extra_body.cache_salt, value=`salt123`, merge=true<br />  Output: \{`extra_body`: \{`temperature`: 0.7, `cache_salt`: `salt123`\}\}<br />Default is false (complete replacement)."
 />
 
 
@@ -2489,6 +2501,37 @@ ToolCall represents a tool call in the MCP authorization target.
   type="string"
   required="true"
   description="Tool is the name of the tool."
+/>
+
+
+#### ValueFrom
+
+
+
+**Appears in:**
+- [HTTPBodyField](#httpbodyfield)
+
+ValueFrom defines how to derive a dynamic value for a body field mutation.
+
+##### Fields
+
+
+
+<ApiField
+  name="headerName"
+  type="string"
+  required="true"
+  description="HeaderName specifies the name of the HTTP header to extract the value from."
+/><ApiField
+  name="hash"
+  type="string"
+  required="false"
+  description="Hash specifies the hash algorithm to apply to the header value.<br />Valid values: `sha256` or empty (no hashing)."
+/><ApiField
+  name="encoding"
+  type="string"
+  required="false"
+  description="Encoding specifies the encoding for the hash output.<br />Required when Hash is set.<br />Valid values: `base64` or empty (raw bytes as JSON array)."
 />
 
 

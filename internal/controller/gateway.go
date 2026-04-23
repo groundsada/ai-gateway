@@ -197,7 +197,19 @@ func bodyMutationToFilterAPI(m *aigv1a1.HTTPBodyMutation) *filterapi.HTTPBodyMut
 	ret.Remove = make([]string, 0, len(m.Remove))
 	ret.Remove = append(ret.Remove, m.Remove...)
 	for _, field := range m.Set {
-		ret.Set = append(ret.Set, filterapi.HTTPBodyField{Path: field.Path, Value: field.Value})
+		f := filterapi.HTTPBodyField{
+			Path:  field.Path,
+			Value: field.Value,
+			Merge: field.Merge,
+		}
+		if field.ValueFrom != nil {
+			f.ValueFrom = &filterapi.ValueFrom{
+				HeaderName: field.ValueFrom.HeaderName,
+				Hash:       field.ValueFrom.Hash,
+				Encoding:   field.ValueFrom.Encoding,
+			}
+		}
+		ret.Set = append(ret.Set, f)
 	}
 	return ret
 }

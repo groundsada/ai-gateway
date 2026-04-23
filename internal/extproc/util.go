@@ -104,13 +104,14 @@ func mutationsFromTranslationResult(newHeaders []internalapi.Header, newBody []b
 
 // applyBodyMutation applies body mutations from the route and also restores original body on retry.
 // This utility function handles both creating new mutations and modifying existing ones.
-func applyBodyMutation(bodyMutator *bodymutator.BodyMutator, bodyMutation *extprocv3.BodyMutation, originalRequestBodyRaw []byte, logger *slog.Logger) *extprocv3.BodyMutation {
+// It passes headers to the body mutator for resolving dynamic values.
+func applyBodyMutation(bodyMutator *bodymutator.BodyMutator, bodyMutation *extprocv3.BodyMutation, originalRequestBodyRaw []byte, headers map[string]string, logger *slog.Logger) *extprocv3.BodyMutation {
 	if bodyMutator == nil {
 		return bodyMutation
 	}
 
 	if bodyMutation == nil {
-		mutatedBody, mutationErr := bodyMutator.Mutate(originalRequestBodyRaw)
+		mutatedBody, mutationErr := bodyMutator.MutateWithHeaders(originalRequestBodyRaw, headers)
 		if mutationErr != nil {
 			logger.Error("failed to apply body mutation on original request body", "error", mutationErr)
 		} else {
@@ -119,7 +120,7 @@ func applyBodyMutation(bodyMutator *bodymutator.BodyMutator, bodyMutation *extpr
 			}
 		}
 	} else if bodyMutation.GetBody() != nil && len(bodyMutation.GetBody()) > 0 {
-		mutatedBody, mutationErr := bodyMutator.Mutate(bodyMutation.GetBody())
+		mutatedBody, mutationErr := bodyMutator.MutateWithHeaders(bodyMutation.GetBody(), headers)
 		if mutationErr != nil {
 			logger.Error("failed to apply body mutation", "error", mutationErr)
 		} else {

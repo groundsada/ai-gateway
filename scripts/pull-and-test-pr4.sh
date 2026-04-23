@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Copyright Envoy AI Gateway Authors
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
 # Pull and test https://github.com/groundsada/ai-gateway/pull/4 (Anthropic support for OpenAI).
 # Run from ai-gateway repo root. Requires: git, go. Does not run e2e (no kind/Docker/Ollama).
 set -e

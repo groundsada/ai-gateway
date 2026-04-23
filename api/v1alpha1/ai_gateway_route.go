@@ -470,7 +470,7 @@ type HTTPBodyMutation struct {
 // HTTPBodyField represents a JSON field name and value for body mutation
 type HTTPBodyField struct {
 	// Path is the top-level field name to set in the request body.
-	// Examples: "service_tier", "max_tokens", "temperature"
+	// Examples: "service_tier", "max_tokens", "temperature", "extra_body.cache_salt"
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -488,6 +488,61 @@ type HTTPBodyField struct {
 	//   - "[1, 2, 3]" (array)
 	//   - "null" (null)
 	//
+	// Cannot be used together with ValueFrom.
+	//
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// ValueFrom specifies a dynamic value to set at the specified field, derived from request context.
+	// This is useful for generating user-specific values like cache_salt.
+	//
+	// Cannot be used together with Value.
+	//
+	// Example for cache_salt isolation:
+	//   valueFrom:
+	//     headerName: x-user-id
+	//     hash: sha256
+	//     encoding: base64
+	//
+	// +optional
+	ValueFrom *ValueFrom `json:"valueFrom,omitempty"`
+
+	// Merge specifies whether to merge with an existing value at the path instead of replacing it.
+	// When true and the path points to an existing object/map, the value will be merged into the existing object.
+	// This is useful for adding fields like cache_salt to existing extra_body without losing other fields.
+	//
+	// Example:
+	//   Input:  {"extra_body": {"temperature": 0.7}}
+	//   Config: path=extra_body.cache_salt, value="salt123", merge=true
+	//   Output: {"extra_body": {"temperature": 0.7, "cache_salt": "salt123"}}
+	//
+	// Default is false (complete replacement).
+	//
+	// +optional
+	// +kubebuilder:default=false
+	Merge *bool `json:"merge,omitempty"`
+}
+
+// ValueFrom defines how to derive a dynamic value for a body field mutation.
+type ValueFrom struct {
+	// HeaderName specifies the name of the HTTP header to extract the value from.
+	//
 	// +kubebuilder:validation:Required
-	Value string `json:"value"`
+	// +kubebuilder:validation:MinLength=1
+	HeaderName string `json:"headerName"`
+
+	// Hash specifies the hash algorithm to apply to the header value.
+	// Valid values: "sha256" or empty (no hashing).
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=sha256;""
+	Hash string `json:"hash,omitempty"`
+
+	// Encoding specifies the encoding for the hash output.
+	// Required when Hash is set.
+	// Valid values: "base64" or empty (raw bytes as JSON array).
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=base64;""
+	Encoding string `json:"encoding,omitempty"`
 }
