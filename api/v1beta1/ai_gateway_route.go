@@ -442,6 +442,43 @@ type HTTPBodyField struct {
 	//   - "[1, 2, 3]" (array)
 	//   - "null" (null)
 	//
+	// +kubebuilder:validation:Optional
+	// +optional
+	Value string `json:"value,omitempty"`
+
+	// Merge, when true, merges the new value into an existing object at the path
+	// instead of replacing it entirely. This preserves existing fields.
+	//
+	// +kubebuilder:validation:Optional
+	// +optional
+	Merge bool `json:"merge,omitempty"`
+
+	// ValueFrom extracts a dynamic value from the request context (e.g., a header).
+	//
+	// +kubebuilder:validation:Optional
+	// +optional
+	ValueFrom *HTTPBodyFieldValueFrom `json:"valueFrom,omitempty"`
+}
+
+// HTTPBodyFieldValueFrom defines the source of a dynamic value for body mutation.
+type HTTPBodyFieldValueFrom struct {
+	// HeaderName is the name of the request header to extract the value from.
+	//
 	// +kubebuilder:validation:Required
-	Value string `json:"value"`
+	// +kubebuilder:validation:MinLength=1
+	HeaderName string `json:"headerName"`
+
+	// Hash is the hash algorithm to apply to the extracted value.
+	// Supported values: "sha256". If empty, the raw value is used.
+	//
+	// +kubebuilder:validation:Optional
+	// +optional
+	Hash string `json:"hash,omitempty"`
+
+	// Encoding is the output encoding to apply after hashing.
+	// Supported values: "base64". If empty, raw bytes are used.
+	//
+	// +kubebuilder:validation:Optional
+	// +optional
+	Encoding string `json:"encoding,omitempty"`
 }

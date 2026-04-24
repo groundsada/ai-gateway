@@ -1,8 +1,3 @@
-# Copyright Envoy AI Gateway Authors
-# SPDX-License-Identifier: Apache-2.0
-# The full text of the Apache license is available in the LICENSE file at
-# the root of the repo.
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -194,6 +189,11 @@ spec:
                       description: HTTPBodyField represents a JSON field name and
                         value for body mutation
                       properties:
+                        merge:
+                          description: |-
+                            Merge, when true, merges the new value into an existing object at the path
+                            instead of replacing it entirely. This preserves existing fields.
+                          type: boolean
                         path:
                           description: |-
                             Path is the top-level field name to set in the request body.
@@ -214,9 +214,30 @@ spec:
                               - "[1, 2, 3]" (array)
                               - "null" (null)
                           type: string
+                        valueFrom:
+                          description: ValueFrom extracts a dynamic value from the
+                            request context (e.g., a header).
+                          properties:
+                            encoding:
+                              description: |-
+                                Encoding is the output encoding to apply after hashing.
+                                Supported values: "base64". If empty, raw bytes are used.
+                              type: string
+                            hash:
+                              description: |-
+                                Hash is the hash algorithm to apply to the extracted value.
+                                Supported values: "sha256". If empty, the raw value is used.
+                              type: string
+                            headerName:
+                              description: HeaderName is the name of the request header
+                                to extract the value from.
+                              minLength: 1
+                              type: string
+                          required:
+                          - headerName
+                          type: object
                       required:
                       - path
-                      - value
                       type: object
                     maxItems: 16
                     type: array
@@ -598,6 +619,11 @@ spec:
                       description: HTTPBodyField represents a JSON field name and
                         value for body mutation
                       properties:
+                        merge:
+                          description: |-
+                            Merge, when true, merges the new value into an existing object at the path
+                            instead of replacing it entirely. This preserves existing fields.
+                          type: boolean
                         path:
                           description: |-
                             Path is the top-level field name to set in the request body.
@@ -618,9 +644,30 @@ spec:
                               - "[1, 2, 3]" (array)
                               - "null" (null)
                           type: string
+                        valueFrom:
+                          description: ValueFrom extracts a dynamic value from the
+                            request context (e.g., a header).
+                          properties:
+                            encoding:
+                              description: |-
+                                Encoding is the output encoding to apply after hashing.
+                                Supported values: "base64". If empty, raw bytes are used.
+                              type: string
+                            hash:
+                              description: |-
+                                Hash is the hash algorithm to apply to the extracted value.
+                                Supported values: "sha256". If empty, the raw value is used.
+                              type: string
+                            headerName:
+                              description: HeaderName is the name of the request header
+                                to extract the value from.
+                              minLength: 1
+                              type: string
+                          required:
+                          - headerName
+                          type: object
                       required:
                       - path
-                      - value
                       type: object
                     maxItems: 16
                     type: array
