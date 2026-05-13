@@ -32,6 +32,9 @@ type Config struct {
 	Version string `json:"version,omitempty"`
 	// UUID is the unique identifier of the filter configuration assigned by the AI Gateway when the configuration is updated.
 	UUID string `json:"uuid,omitempty"`
+	// GlobalLLMRequestCosts configures gateway-level default costs for LLM requests.
+	// These costs apply to all routes unless overridden by route-specific LLMRequestCosts.
+	GlobalLLMRequestCosts []GlobalLLMRequestCost `json:"globalLLMRequestCosts,omitempty"`
 	// LLMRequestCost configures the cost of each LLM-related request. Optional. If this is provided, the filter will populate
 	// the "calculated" cost in the filter metadata at the end of the response body processing.
 	LLMRequestCosts []LLMRequestCost `json:"llmRequestCosts,omitempty"`
@@ -62,6 +65,22 @@ type Model struct {
 // the rate limit configuration https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-ratelimit
 // introduced in Envoy 1.33.
 type LLMRequestCost struct {
+	// MetadataKey is the key of the metadata storing the request cost.
+	MetadataKey string `json:"metadataKey"`
+	// RouteName scopes this cost to a single AIGatewayRoute (format "namespace/name").
+	// When empty, the cost applies to any request (wildcard). The controller sets this for each route.
+	RouteName string `json:"routeName,omitempty"`
+	// Type is the kind of the request cost calculation.
+	Type LLMRequestCostType `json:"type"`
+	// CEL is the CEL expression to calculate the cost of the request.
+	// This is not empty when the Type is LLMRequestCostTypeCEL.
+	CEL string `json:"cel,omitempty"`
+}
+
+// GlobalLLMRequestCost specifies gateway-level default request cost configuration.
+// This is identical to LLMRequestCost but without the RouteName field, as global costs
+// apply to all routes and are not scoped to a specific route.
+type GlobalLLMRequestCost struct {
 	// MetadataKey is the key of the metadata storing the request cost.
 	MetadataKey string `json:"metadataKey"`
 	// Type is the kind of the request cost calculation.
