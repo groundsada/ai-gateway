@@ -414,7 +414,13 @@ func (c *GatewayController) reconcileFilterConfigSecret(
 			}
 
 			for _, cost := range aiGatewayRoute.Spec.LLMRequestCosts {
-				fc := filterapi.LLMRequestCost{MetadataKey: cost.MetadataKey}
+				fc := filterapi.LLMRequestCost{
+					MetadataKey: cost.MetadataKey,
+					// Scope the cost to this AIGatewayRoute. The extproc runtime
+					// validator rejects route-scoped costs with empty RouteName,
+					// which would block every config update.
+					RouteName: fmt.Sprintf("%s/%s", aiGatewayRoute.Namespace, aiGatewayRoute.Name),
+				}
 				_, ok := llmCosts[cost.MetadataKey]
 				if ok {
 					c.logger.Info("LLMRequestCost with the same metadata key already exists, skipping",
