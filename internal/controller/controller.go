@@ -361,6 +361,22 @@ func ApplyIndexing(ctx context.Context, indexer func(ctx context.Context, obj cl
 	if err != nil {
 		return fmt.Errorf("failed to index field for BackendSecurityPolicy targetRefs: %w", err)
 	}
+	// The Gateway controller's filter-config reconcile (gateway.go) lists
+	// v1alpha1 BackendSecurityPolicy objects (backendWithMaybeBSP /
+	// getBSPForInferencePool). Without parallel v1alpha1 index registration,
+	// those lookups fail with "Index ... does not exist", every backend gets
+	// skipped, and the filter-config Secret ends up with an empty `backends`
+	// section — which leaves the upstream ext_proc with "unknown backend".
+	err = indexer(ctx, &aigv1a1.BackendSecurityPolicy{},
+		k8sClientIndexSecretToReferencingBackendSecurityPolicy, backendSecurityPolicyIndexFuncV1Alpha1)
+	if err != nil {
+		return fmt.Errorf("failed to create v1alpha1 index from Secret to BackendSecurityPolicy: %w", err)
+	}
+	err = indexer(ctx, &aigv1a1.BackendSecurityPolicy{},
+		k8sClientIndexAIServiceBackendToTargetingBackendSecurityPolicy, backendSecurityPolicyTargetRefsIndexFuncV1Alpha1)
+	if err != nil {
+		return fmt.Errorf("failed to index v1alpha1 field for BackendSecurityPolicy targetRefs: %w", err)
+	}
 
 	err = indexer(ctx, &gwapiv1.Gateway{},
 		k8sClientIndexGatewayToGatewayConfig, gatewayToGatewayConfigIndexFunc)
@@ -521,6 +537,51 @@ func backendSecurityPolicyIndexFunc(o client.Object) []string {
 
 func backendSecurityPolicyTargetRefsIndexFunc(o client.Object) []string {
 	backendSecurityPolicy := o.(*aigv1b1.BackendSecurityPolicy)
+	var ret []string
+	for _, targetRef := range backendSecurityPolicy.Spec.TargetRefs {
+		ret = append(ret, fmt.Sprintf("%s.%s", targetRef.Name, backendSecurityPolicy.Namespace))
+	}
+	return ret
+}
+
+func backendSecurityPolicyIndexFuncV1Alpha1(o client.Object) []string {
+	backendSecurityPolicy := o.(*aigv1a1.BackendSecurityPolicy)
+	var key string
+	switch backendSecurityPolicy.Spec.Type {
+	case aigv1a1.BackendSecurityPolicyTypeAPIKey:
+		apiKey := backendSecurityPolicy.Spec.APIKey
+		key = getSecretNameAndNamespace(apiKey.SecretRef, backendSecurityPolicy.Namespace)
+	case aigv1a1.BackendSecurityPolicyTypeAWSCredentials:
+		awsCreds := backendSecurityPolicy.Spec.AWSCredentials
+		if awsCreds.CredentialsFile != nil {
+			key = getSecretNameAndNamespace(awsCreds.CredentialsFile.SecretRef, backendSecurityPolicy.Namespace)
+		} else if awsCreds.OIDCExchangeToken != nil {
+			key = backendSecurityPolicyKey(backendSecurityPolicy.Namespace, backendSecurityPolicy.Name)
+		}
+	case aigv1a1.BackendSecurityPolicyTypeGCPCredentials:
+		gcpCreds := backendSecurityPolicy.Spec.GCPCredentials
+		if gcpCreds.CredentialsFile != nil {
+			key = getSecretNameAndNamespace(gcpCreds.CredentialsFile.SecretRef, backendSecurityPolicy.Namespace)
+		}
+	case aigv1a1.BackendSecurityPolicyTypeAzureAPIKey:
+		apiKey := backendSecurityPolicy.Spec.AzureAPIKey
+		key = getSecretNameAndNamespace(apiKey.SecretRef, backendSecurityPolicy.Namespace)
+	case aigv1a1.BackendSecurityPolicyTypeAnthropicAPIKey:
+		apiKey := backendSecurityPolicy.Spec.AnthropicAPIKey
+		key = getSecretNameAndNamespace(apiKey.SecretRef, backendSecurityPolicy.Namespace)
+	case aigv1a1.BackendSecurityPolicyTypeAzureCredentials:
+		azureCreds := backendSecurityPolicy.Spec.AzureCredentials
+		if azureCreds.ClientSecretRef != nil {
+			key = getSecretNameAndNamespace(azureCreds.ClientSecretRef, backendSecurityPolicy.Namespace)
+		} else if azureCreds.OIDCExchangeToken != nil {
+			key = backendSecurityPolicyKey(backendSecurityPolicy.Namespace, backendSecurityPolicy.Name)
+		}
+	}
+	return []string{key}
+}
+
+func backendSecurityPolicyTargetRefsIndexFuncV1Alpha1(o client.Object) []string {
+	backendSecurityPolicy := o.(*aigv1a1.BackendSecurityPolicy)
 	var ret []string
 	for _, targetRef := range backendSecurityPolicy.Spec.TargetRefs {
 		ret = append(ret, fmt.Sprintf("%s.%s", targetRef.Name, backendSecurityPolicy.Namespace))
