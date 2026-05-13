@@ -664,6 +664,77 @@ func TestMaybeModifyClusterExtended(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, buf.String(), "failed to unmarshal HttpProtocolOptions")
 	})
+
+	// Regression: when an AIGatewayRoute rule has been transitioned from an
+	// AIServiceBackend backendRef to an InferencePool backendRef on an
+	// already-translated route, Envoy Gateway re-runs PostTranslateModify but
+	// does NOT re-invoke PostClusterModify with the InferencePool extension
+	// resource. The cluster therefore keeps its previous AIServiceBackend
+	// shape, getInferencePoolByMetadata(cluster.Metadata) returns nil, and the
+	// upstream ext_proc filter resolves the stale backend name. This test
+	// asserts that maybeModifyCluster retroactively applies the InferencePool
+	// configuration (ORIGINAL_DST, EPP metadata, per_route_rule_backend_name
+	// pointing at the InferencePool name) when the rule itself says
+	// InferencePool but the cluster does not yet.
+	t.Run("rule transitioned to InferencePool with stale cluster metadata", func(t *testing.T) {
+		ipNs, ipName, routeName := "test-ns", "qwen3-transitioned", "transition-route"
+
+		// Pre-create the InferencePool the rule references.
+		require.NoError(t, c.Create(t.Context(), &gwaiev1.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{Name: ipName, Namespace: ipNs},
+			Spec: gwaiev1.InferencePoolSpec{
+				TargetPorts:       []gwaiev1.Port{{Number: 5000}},
+				EndpointPickerRef: gwaiev1.EndpointPickerRef{Name: ipName + "-epp"},
+			},
+		}))
+
+		ipGroup := "inference.networking.k8s.io"
+		ipKind := "InferencePool"
+		// AIGatewayRoute with a single rule pointing at the InferencePool.
+		require.NoError(t, c.Create(t.Context(), &aigv1b1.AIGatewayRoute{
+			ObjectMeta: metav1.ObjectMeta{Name: routeName, Namespace: ipNs},
+			Spec: aigv1b1.AIGatewayRouteSpec{
+				Rules: []aigv1b1.AIGatewayRouteRule{{
+					BackendRefs: []aigv1b1.AIGatewayRouteRuleBackendRef{{
+						Name:  ipName,
+						Group: &ipGroup,
+						Kind:  &ipKind,
+					}},
+				}},
+			},
+		}))
+
+		// Simulate the bug: cluster has no per_route_rule_inference_pool
+		// metadata (PostClusterModify was bypassed on this update).
+		cluster := &clusterv3.Cluster{
+			Name:     fmt.Sprintf("httproute/%s/%s/rule/0", ipNs, routeName),
+			Metadata: &corev3.Metadata{},
+		}
+
+		var buf bytes.Buffer
+		s, err := New(c, logr.FromSlogHandler(slog.NewTextHandler(&buf, &slog.HandlerOptions{})), udsPath, false, nil, nil)
+		require.NoError(t, err)
+
+		require.NoError(t, s.maybeModifyCluster(t.Context(), cluster))
+		require.Contains(t, buf.String(), "retroactively configuring InferencePool on cluster after rule transition")
+
+		// Cluster should now have InferencePool shape (ORIGINAL_DST).
+		require.Equal(t, clusterv3.Cluster_ORIGINAL_DST, cluster.GetType())
+		require.Equal(t, clusterv3.Cluster_CLUSTER_PROVIDED, cluster.GetLbPolicy())
+
+		// And both metadata keys should be present, with the backend-name path
+		// referencing the InferencePool name (not any prior AIServiceBackend).
+		require.NotNil(t, cluster.Metadata)
+		require.NotNil(t, cluster.Metadata.FilterMetadata)
+		ns, ok := cluster.Metadata.FilterMetadata[internalapi.InternalEndpointMetadataNamespace]
+		require.True(t, ok, "InternalEndpointMetadataNamespace missing from cluster metadata")
+		require.Contains(t, ns.Fields, "per_route_rule_inference_pool")
+		require.Contains(t, ns.Fields, internalapi.InternalMetadataBackendNameKey)
+		require.Equal(t,
+			internalapi.PerRouteRuleRefBackendName(ipNs, ipName, routeName, 0, 0),
+			ns.Fields[internalapi.InternalMetadataBackendNameKey].GetStringValue(),
+			"backend name in cluster metadata must reference the InferencePool, not a stale AIServiceBackend")
+	})
 }
 
 // TestMaybeModifyListenerAndRoutes tests the maybeModifyListenerAndRoutes function.

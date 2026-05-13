@@ -204,6 +204,34 @@ func (s *Server) maybeModifyCluster(ctx context.Context, cluster *clusterv3.Clus
 	}
 	httpRouteRule := &aigwRoute.Spec.Rules[httpRouteRuleIndex]
 
+	// Defensive: if this rule has an InferencePool backendRef but the cluster's
+	// metadata doesn't yet carry the InferencePool reference, retroactively
+	// configure the cluster for InferencePool routing. This happens when an
+	// AIGatewayRoute rule is updated from an AIServiceBackend to an
+	// InferencePool backendRef on an already-translated route: Envoy Gateway
+	// re-runs PostTranslateModify but does not re-invoke PostClusterModify
+	// with the new BackendExtensionResources for the existing cluster, so the
+	// cluster keeps its prior AIServiceBackend shape and metadata.
+	// Without this, the upstream ext_proc filter reads the stale
+	// per_route_rule_backend_name from cluster metadata (pointing at the old
+	// AIServiceBackend), fails to find it in the regenerated filter-config
+	// (which now keys on the InferencePool name), and returns "unknown backend".
+	if pool == nil && len(httpRouteRule.BackendRefs) > 0 && httpRouteRule.BackendRefs[0].IsInferencePool() {
+		backendRef := httpRouteRule.BackendRefs[0]
+		ipNs := backendRef.GetNamespace(aigwRoute.Namespace)
+		ipName := backendRef.Name
+		var ip gwaiev1.InferencePool
+		if getErr := s.k8sClient.Get(ctx, client.ObjectKey{Namespace: ipNs, Name: ipName}, &ip); getErr != nil {
+			s.log.Error(getErr, "failed to fetch InferencePool for retroactive cluster fix",
+				"cluster_name", cluster.Name, "pool_namespace", ipNs, "pool_name", ipName)
+		} else {
+			s.log.Info("retroactively configuring InferencePool on cluster after rule transition",
+				"cluster_name", cluster.Name, "pool", ipName)
+			s.handleInferencePoolCluster(cluster, &ip)
+			pool = &ip
+		}
+	}
+
 	// Only process LoadAssignment for non-InferencePool backends.
 	if pool == nil {
 		if cluster.LoadAssignment == nil {
