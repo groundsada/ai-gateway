@@ -339,6 +339,18 @@ func ApplyIndexing(ctx context.Context, indexer func(ctx context.Context, obj cl
 	if err != nil {
 		return fmt.Errorf("failed to create index from Gateway to AIGatewayRoute: %w", err)
 	}
+	// Also index v1alpha1 AIGatewayRoute under the same name. The Gateway
+	// controller's filter-config reconcile queries the v1alpha1 list; without
+	// this duplicate registration the v1alpha1 informer's cache has no index
+	// by this name and the List fails with
+	//   "Index with name field:GWAPIGatewayToReferencingAIGatewayRoute does not exist"
+	// which blocks regeneration of the filter-config Secret (incl. the path
+	// where a rule transitions from AIServiceBackend to InferencePool).
+	err = indexer(ctx, &aigv1a1.AIGatewayRoute{},
+		k8sClientIndexAIGatewayRouteToAttachedGateway, aiGatewayRouteToAttachedGatewayIndexFuncV1Alpha1)
+	if err != nil {
+		return fmt.Errorf("failed to create v1alpha1 index from Gateway to AIGatewayRoute: %w", err)
+	}
 	err = indexer(ctx, &aigv1b1.BackendSecurityPolicy{},
 		k8sClientIndexSecretToReferencingBackendSecurityPolicy, backendSecurityPolicyIndexFunc)
 	if err != nil {
@@ -435,6 +447,19 @@ func aiGatewayRouteToAttachedGatewayIndexFunc(o client.Object) []string {
 	var ret []string
 	for _, ref := range aiGatewayRoute.Spec.ParentRefs {
 		// Use the namespace from parentRef if specified, otherwise use the route's namespace.
+		namespace := aiGatewayRoute.Namespace
+		if ref.Namespace != nil && *ref.Namespace != "" {
+			namespace = string(*ref.Namespace)
+		}
+		ret = append(ret, fmt.Sprintf("%s.%s", ref.Name, namespace))
+	}
+	return ret
+}
+
+func aiGatewayRouteToAttachedGatewayIndexFuncV1Alpha1(o client.Object) []string {
+	aiGatewayRoute := o.(*aigv1a1.AIGatewayRoute)
+	var ret []string
+	for _, ref := range aiGatewayRoute.Spec.ParentRefs {
 		namespace := aiGatewayRoute.Namespace
 		if ref.Namespace != nil && *ref.Namespace != "" {
 			namespace = string(*ref.Namespace)
